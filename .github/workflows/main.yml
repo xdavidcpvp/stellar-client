@@ -1,18 +1,83 @@
-name: build
-on: [push, workflow_dispatch]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 25
-      - run: chmod +x ./gradlew
-      - run: ./gradlew build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mod
-          path: build/libs/*.jar
-          
+
+package donutpaymentcolor.client;
+
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class StellarPaymentColors implements ClientModInitializer {
+
+    private static final String AMT =
+            "(\\$[\\d,]+(?:\\.\\d+)?[kmbtKMBT]?)";
+
+    private static final Pattern RECEIVED = Pattern.compile(
+            "(\\w{3,16}) (paid you) " + AMT,
+            Pattern.CASE_INSENSITIVE
+    );
+
+    private static final Pattern SENT = Pattern.compile(
+            "(you paid) (\\w{3,16}) " + AMT,
+            Pattern.CASE_INSENSITIVE
+    );
+
+    @Override
+    public void onInitializeClient() {
+        ClientReceiveMessageEvents.MODIFY_GAME.register((message, overlay) -> {
+            if (overlay) return message;
+
+            String s = message.getString();
+
+            Matcher m = RECEIVED.matcher(s);
+
+            if (m.find()) {
+                return build(message, s, m.start(), m.end(),
+                        part(m.group(1), ChatFormatting.BLUE),
+                        part(" ", null),
+                        part(m.group(2), ChatFormatting.BLUE),
+                        part(" ", null),
+                        part(m.group(3), ChatFormatting.GREEN));
+            }
+
+            m = SENT.matcher(s);
+
+            if (m.find()) {
+                return build(message, s, m.start(), m.end(),
+                        part(m.group(1), ChatFormatting.BLUE),
+                        part(" ", null),
+                        part(m.group(2), ChatFormatting.BLUE),
+                        part(" ", null),
+                        part(m.group(3), ChatFormatting.GREEN));
+            }
+
+            return message;
+        });
+    }
+
+    private static MutableComponent part(String text, ChatFormatting color) {
+        MutableComponent component = Component.literal(text);
+        return color == null ? component : component.withStyle(color);
+    }
+
+    private static Component build(
+            Component original,
+            String s,
+            int start,
+            int end,
+            MutableComponent... parts
+    ) {
+        MutableComponent out = Component.literal(s.substring(0, start));
+
+        for (MutableComponent part : parts) {
+            out.append(part);
+        }
+
+        out.append(Component.literal(s.substring(end)));
+        return out;
+    }
+}
+
